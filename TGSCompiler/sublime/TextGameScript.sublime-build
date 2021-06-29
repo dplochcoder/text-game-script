@@ -1,0 +1,5 @@
+{
+    "cmd": ["java", "-jar", "$JAR-GOES-HERE$", "$SUBLIME-USER-DIR-GOES-HERE"],
+    "file_patterns": ["*.tgs"],
+    "file_regex": "ERROR: ([^@]+)@(\\d+):(\\d+) (.+)",
+}

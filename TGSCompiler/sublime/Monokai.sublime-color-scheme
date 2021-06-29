@@ -1,0 +1,67 @@
+{
+    "name": "TGS Color Scheme",
+    "globals":
+    {
+        "background": "#1f1f1e",
+        "foreground": "#d9d9d9",
+        "caret": "#d9d9d9"
+    },
+    "rules":
+    [
+        {
+            "name": "Comment",
+            "scope": "comment.tgs",
+            "foreground": "#d9d96c"
+        },
+        {
+            "name": "EnumType",
+            "scope": "enum_type.tgs",
+            "foreground": "#f1f140"
+        },
+        {
+            "name": "StructType",
+            "scope": "struct_type.tgs",
+            "foreground": "#80ff80"
+        },
+        {
+            "name": "BBCode",
+            "scope": "bbcode.tgs",
+            "foreground": "#e55da5"
+        },
+        {
+            "name": "Value",
+            "scope": "value.tgs",
+            "foreground": "#2b7f69",
+        },
+        {
+            "name": "Id",
+            "scope": "id.tgs",
+            "foreground": "#33cc33"
+        },
+        {
+            "name": "Tag",
+            "scope": "tag.tgs",
+            "foreground": "#808080",
+        },
+        {
+            "name": "DefineTag",
+            "scope": "define_tag.tgs",
+            "foreground": "#b333cc",
+        },
+        {
+            "name": "Variable",
+            "scope": "variable.tgs",
+            "foreground": "#33bfcc",
+        },
+        {
+            "name": "Script",
+            "scope": "script.tgs",
+            "foreground": "#ff6c00",
+        },
+        {
+            "name": "BrokenTag",
+            "scope": "broken_tag.tgs",
+            "foreground": "#b30000",
+        },
+    ]
+}

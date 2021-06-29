@@ -1,0 +1,359 @@
+{namespace tgs}
+
+{template .regexOr kind="text"}
+{@param values: list<string>}
+
+{for $value in $values}
+  {if isFirst($value)}
+    {$value}{nil}
+  {else}
+    |{$value}{nil}
+  {/if}
+{/for}
+{/template}
+
+{template .enumMatcher kind="text"}
+{@param enumTypes: list<[typeName: string, values: list<string>]>}
+{@param nextScope: string}
+
+	{for $enumType in $enumTypes}{literal}
+    - match: "\\b({/literal}{$enumType.typeName}{literal}).({/literal}{call .regexOr}{param values: $enumType.values /}{/call}{literal})\\b"
+      scope: value.tgs
+      set: {/literal}{$nextScope}{literal}
+      captures:
+        1: enum_type.tgs
+    - match: "\\b({/literal}{$enumType.typeName}{literal})\\.({{id}})\\b"
+      scope: broken_tag.tgs
+      set: broken_whole_tag
+      captures:
+        1: enum_type.tgs{/literal}
+    {/for}
+{/template}
+
+{template .setNoMoreArgs kind="text"}
+{@param? nextScope: string}
+
+{if $nextScope}{literal}
+      set: {/literal}{$nextScope}
+{/if}
+{/template}
+
+{template .arbitraryExpressionsMatchers kind="text"}
+{@param structTypeNames: list<string>}
+{@param enumTypeNames: list<string>}
+{@param enumTypes: list<[typeName: string, values: list<string>]>}
+{@param nextScope: string}
+
+    {literal}- include: comments
+    - match: "\\\""
+      scope: value.tgs{/literal}
+      {if $nextScope}{literal}
+      set: [{/literal}{$nextScope}{literal}, string_literal]{/literal}
+      {else}{literal}
+      push: string_literal{/literal}
+      {/if}{literal}
+    - match: "\\b(and|or|not)\\b"
+      scope: tag.tgs{/literal}{call .setNoMoreArgs}{param nextScope: $nextScope /}{/call}{literal}
+    - match: "\\b{{constant_values_except_enum_and_string_literal}}\\b"
+      scope: value.tgs{/literal}{call .setNoMoreArgs}{param nextScope: $nextScope /}{/call}
+    {if length($enumTypes)}{literal}
+    {/literal}{call .enumMatcher}{param enumTypes: $enumTypes /}{param nextScope: $nextScope /}{/call}
+    {/if}{literal}
+    - match: "{{type_literals}}\\b"
+      scope: value.tgs{/literal}{call .setNoMoreArgs}{param nextScope: $nextScope /}{/call}
+    {if length($structTypeNames)}{literal}
+    - match: "\\bSTRUCT\\.({/literal}{call .regexOr}{param values: $structTypeNames /}{/call}{literal})"
+      scope: value.tgs
+      captures:
+        1: struct_type.tgs{/literal}{call .setNoMoreArgs}{param nextScope: $nextScope /}{/call}
+    {/if}
+    {if length($enumTypeNames)}{literal}
+    - match: "\\bENUM\\.({/literal}{call .regexOr}{param values: $enumTypeNames /}{/call}{literal})"
+      scope: value.tgs
+      captures:
+        1: enum_type.tgs{/literal}{call .setNoMoreArgs}{param nextScope: $nextScope /}{/call}
+    {/if}{literal}
+    - match: "\\b({{id}})\\.(?:{{struct_field_names}})\\b"
+      scope: variable.tgs
+      captures:
+        1: struct_type.tgs{/literal}{call .setNoMoreArgs}{param nextScope: $nextScope /}{/call}{literal}
+    - match: "\\b({{id}})\\.{{id}}\\b"
+      scope: broken_tag.tgs
+      captures:
+        1: struct_type.tgs{/literal}{call .setNoMoreArgs}{param nextScope: $nextScope /}{/call}{literal}
+    - match: "{{script_reference}}"
+      scope: tag.tgs
+      captures:
+        1: script.tgs{/literal}{call .setNoMoreArgs}{param nextScope: $nextScope /}{/call}{literal}
+    - match: "\\$"
+      scope: broken_tag.tgs
+      set: broken_whole_tag
+    - match: "\\b{{id}}\\b"
+      scope: variable.tgs{/literal}{call .setNoMoreArgs}{param nextScope: $nextScope /}{/call}{literal}
+    - match: "\\["
+      scope: broken_tag.tgs{/literal}{call .setNoMoreArgs}{param nextScope: $nextScope /}{/call}{literal}
+    - match: "."
+      scope: tag.tgs{/literal}{call .setNoMoreArgs}{param nextScope: $nextScope /}{/call}
+{/template}
+
+{template .argsRuleMatchers kind="text"}
+{@param structTypeNames: list<string>}
+{@param enumTypeNames: list<string>}
+{@param enumTypes: list<[typeName: string, values: list<string>]>}
+{@param nodes: list<[matcher: string, scope: string, chain: string, enumValues: list<string>]>}
+{@param allowsNoMoreArgs: bool}
+{@param closingTagScope: string}
+{@param allowNoMoreArgsScope: string}
+
+{literal}- include: comments{/literal}
+    {for $node in $nodes}
+    {if $node.matcher == "ID"}{literal}
+    - match: "{{id}}\\b"
+      scope: {/literal}{$node.scope}{literal}
+      set: {/literal}{$node.chain}
+    {/if}
+    {if $node.matcher == "SCRIPT_REFERENCE"}{literal}
+    - match: "{{script_reference}}"
+      scope: tag.tgs
+      set: {/literal}{$node.chain}{literal}
+      captures:
+        1: script.tgs{/literal}
+    {/if}
+    {if $node.matcher == "STRING_LITERAL" or $node.matcher == "CONSTANT_VALUE"}{literal}
+    - match: "\\\""
+      scope: value.tgs
+      set: [{/literal}{$node.chain}{literal}, string_literal]{/literal}
+    {/if}
+    {if $node.matcher == "HEX_COLOR_LITERAL"}{literal}
+    - match: "{{hex_color_literal}}\\b"
+      scope: value.tgs
+      set: {/literal}{$node.chain}
+    {/if}
+    {if $node.matcher == "CONSTANT_VALUE"}{literal}
+    - match: "{{constant_values_except_enum_and_string_literal}}\\b"
+      scope: value.tgs
+      set: {/literal}{$node.chain}
+      {if length($enumTypes)}{literal}
+    {/literal}{call .enumMatcher}{param enumTypes: $enumTypes /}{param nextScope: $node.chain /}{/call}
+      {/if}
+    {/if}
+    {if $node.matcher == "ENUM_SHORTHAND"}{literal}
+    - match: "{/literal}{call .regexOr}{param values: $node.enumValues /}{/call}{literal}\\b"
+      scope: enum_type.tgs
+      set: {/literal}{$node.chain}
+    {/if}
+    {/for}{literal}
+    - match: "\\]"{/literal}
+      {if not $allowsNoMoreArgs}{literal}
+      scope: broken_tag.tgs{/literal}
+      {else}{literal}
+      scope: {/literal}{$closingTagScope}
+      {/if}{literal}
+      pop: true{/literal}
+    {for $node in $nodes}
+    {if $node.matcher == "ARBITRARY_EXPRESSION"}{literal}
+    {/literal}
+      {call .arbitraryExpressionsMatchers}
+        {param structTypeNames: $structTypeNames /}
+        {param enumTypeNames: $enumTypeNames /}
+        {param enumTypes: $enumTypes /}
+        {param nextScope: $allowNoMoreArgsScope /}
+      {/call}
+    {/if}
+    {/for}{literal}
+    - include: broken_string_literals
+    - match: "."
+      scope: broken_tag.tgs
+      set: broken_whole_tag{/literal}
+{/template}
+
+{template .argsRule kind="text"}
+{@param structTypeNames: list<string>}
+{@param enumTypeNames: list<string>}
+{@param enumTypes: list<[typeName: string, values: list<string>]>}
+{@param argsRule: [nodes: list<[matcher: string, scope: string, chain: string, enumValues: list<string>]>, uniqueId: string, allowsMoreArgs: bool, allowsNoMoreArgs: bool, closingTagScope: string]}
+
+  {if $argsRule.allowsMoreArgs}
+  {$argsRule.uniqueId}{literal}_firstArg:
+    {/literal}
+    {call .argsRuleMatchers}
+      {param structTypeNames: $structTypeNames /}
+      {param enumTypeNames: $enumTypeNames /}
+      {param enumTypes: $enumTypes /}
+      {param nodes: $argsRule.nodes /}
+      {param allowsNoMoreArgs: $argsRule.allowsNoMoreArgs /}
+      {param closingTagScope: $argsRule.closingTagScope /}
+      {param allowNoMoreArgsScope: $argsRule.uniqueId + "_allowNoMoreArgs" /}
+    {/call}{literal}
+
+  {/literal}{$argsRule.uniqueId}{literal}:
+    {/literal}
+    {call .argsRuleMatchers}
+      {param structTypeNames: $structTypeNames /}
+      {param enumTypeNames: $enumTypeNames /}
+      {param enumTypes: $enumTypes /}
+      {param nodes: $argsRule.nodes /}
+      {param allowsNoMoreArgs: $argsRule.allowsNoMoreArgs /}
+      {param closingTagScope: $argsRule.closingTagScope /}
+      {param allowNoMoreArgsScope: $argsRule.uniqueId + "_allowNoMoreArgs" /}
+    {/call}{literal}
+
+  {/literal}{$argsRule.uniqueId}_allowNoMoreArgs{literal}:
+    {/literal}
+    {call .argsRuleMatchers}
+      {param structTypeNames: $structTypeNames /}
+      {param enumTypeNames: $enumTypeNames /}
+      {param enumTypes: $enumTypes /}
+      {param nodes: $argsRule.nodes /}
+      {param allowsNoMoreArgs: true /}
+      {param closingTagScope: $argsRule.closingTagScope /}
+      {param allowNoMoreArgsScope: $argsRule.uniqueId + "_allowNoMoreArgs" /}
+    {/call}
+  {else}
+  {$argsRule.uniqueId}{literal}_firstArg:
+    - include: comments
+    - include: broken_string_literals
+    - match: "\\]"
+      scope: broken_tag.tgs
+      pop: true
+    - match: "."
+      scope: broken_tag.tgs
+
+  {/literal}{$argsRule.uniqueId}{literal}:
+    - include: comments
+    - include: broken_string_literals
+    - match: "\\]"
+      scope: {/literal}{$argsRule.closingTagScope}{literal}
+      pop: true
+    - match: "."
+      scope: broken_tag.tgs
+
+  {/literal}{$argsRule.uniqueId}_allowNoMoreArgs{literal}:
+    - include: comments
+    - include: broken_string_literals
+    - match: "\\]"
+      scope: {/literal}{$argsRule.closingTagScope}{literal}
+      pop: true
+    - match: "."
+      scope: broken_tag.tgs{/literal}
+  {/if}
+{/template}
+
+{template .sublimeSyntax kind="text"}
+{@param structTypeNames: list<string>}
+{@param structFieldNames: list<string>}
+{@param enumTypeNames: list<string>}
+{@param enumTypes: list<[typeName: string, values: list<string>]>}
+{@param inputHash: string}
+{@param tagRulesNoArgs: list<[tagName: string, tagScope: string, tagIdScope: string]>}
+{@param tagRulesWithArgs: list<[tagName: string, tagScope: string, tagIdScope: string, argsRule: string]>}
+{@param argsRules: list<[nodes: list<[matcher: string, scope: string, chain: string, enumValues: list<string>]>, uniqueId: string, allowsMoreArgs: bool, allowsNoMoreArgs: bool, closingTagScope: string]>}
+
+{literal}%YAML 1.2
+---
+name: TGS
+file_extensions:
+  - tgs
+scope: text.tgs
+
+# input_hash: {/literal}{$inputHash}{literal}
+
+variables:
+  id: "[A-Za-z][A-Za-z0-9_]*"
+  script_reference: "(\\${{id}})\\("
+  hex_color_literal: "#[0-9a-fA-F]{6}"
+  struct_field_names: "{/literal}{call .regexOr}{param values: $structFieldNames /}{/call}{literal}"
+  numeric_literal: "-?\\d+(?:\\.\\d+)?"
+  boolean_literal: "[tT][rR][uU][eE]|[fF][aA][lL][sS][eE]"
+  type_literals: "INTEGER|DOUBLE|STRING|HEX_COLOR|BOOLEAN|BLOCK_ID|PROMPT_ID|VOID"
+  constant_values_except_enum_and_string_literal: "{{hex_color_literal}}|{{numeric_literal}}|{{boolean_literal}}"
+
+contexts:
+  comments:
+    - meta_scope: comment.tgs
+    - match: "\\/\\/"
+      push: one_line_comment
+    - match: "\\/\\*"
+      push: multi_line_comment
+    - match: "\\s+"
+
+  one_line_comment:
+    - meta_scope: comment.tgs
+    - match: "\\n"
+      pop: true
+
+  multi_line_comment:
+    - meta_scope: comment.tgs
+    - match: "\\*\\/"
+      pop: true
+      
+  string_literals:
+    - match: "\\\""
+      scope: value.tgs
+      push: string_literal
+
+  string_literal:
+    - meta_scope: value.tgs
+    - match: "\\\\(\\\"|\\\\|n)"
+    - match: "\\\\."
+      scope: broken_tag.tgs
+    - match: "\\\""
+      pop: true
+      
+  broken_string_literals:
+    - match: "\\\""
+      scope: broken_tag.tgs
+      push: broken_string_literal
+
+  broken_string_literal:
+    - meta_scope: broken_tag.tgs
+    - match: "\\\\."
+    - match: "\\\""
+      pop: true
+
+  broken_whole_tag:
+    - meta_scope: broken_tag.tgs
+    - include: comments
+    - include: broken_string_literals
+    - match: "\\]"
+      pop: true
+    - match: "."
+      
+  broken_until_end_of_tag:
+    - meta_scope: broken_tag.tgs
+    - include: comments
+    - include: broken_string_literals
+    - match: "\\]"
+      scope: tag.tgs
+      pop: true
+    - match: "."
+  
+  main:
+    - include: comments{/literal}
+    {for $tagRuleNoArgs in $tagRulesNoArgs}{literal}
+    - match: "\\[({/literal}{$tagRuleNoArgs.tagName}{literal})\\]"
+      scope: {/literal}{$tagRuleNoArgs.tagScope}{literal}
+      captures:
+        1: {/literal}{$tagRuleNoArgs.tagIdScope}
+    {/for}
+    {for $tagRuleWithArgs in $tagRulesWithArgs}{literal}
+    - match: "\\[({/literal}{$tagRuleWithArgs.tagName}{literal}):"
+      scope: {/literal}{$tagRuleWithArgs.tagScope}{literal}
+      push: {/literal}{$tagRuleWithArgs.argsRule}{literal}_firstArg
+      captures:
+        1: {/literal}{$tagRuleWithArgs.tagIdScope}
+    {/for}{literal}
+    - match: "\\["
+      scope: broken_tag.tgs
+      push: broken_whole_tag{/literal}
+  {for $argsRule in $argsRules}{literal}
+  
+  {/literal}
+  {call .argsRule}
+    {param structTypeNames: $structTypeNames /}
+    {param enumTypeNames: $enumTypeNames /}
+    {param enumTypes: $enumTypes /}
+    {param argsRule: $argsRule /}
+  {/call}
+  {/for}
+{/template}
